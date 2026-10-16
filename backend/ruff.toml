@@ -1,0 +1,11 @@
+line-length = 140
+target-version = "py312"
+extend-exclude = ["apps/*/migrations"]
+
+[lint]
+select = ["E", "F", "W", "I", "B"]
+# E741: short names such as `l` for a line are used deliberately in tight comprehensions.
+ignore = ["B904", "E731", "E741"]
+
+[lint.per-file-ignores]
+"apps/core/management/commands/seed_demo.py" = ["E501"]  # tabular demo data

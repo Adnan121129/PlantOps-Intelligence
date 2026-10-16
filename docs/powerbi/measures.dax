@@ -1,0 +1,123 @@
+// PlantOps Intelligence - DAX measures for the Power BI star schema.
+// Table names assume the bi.* views were imported with the friendly names shown in docs/powerbi/README.md
+// (e.g. bi.fact_downtime_daily -> FactDowntimeDaily). Create these in a dedicated "Measures" table.
+// Every measure below has a SQL equivalent checked by `python manage.py bi_reconcile` against the
+// application KPIs; see "Validating the model".
+
+// ---------------------------------------------------------------- Downtime
+Total Downtime Hours =
+    SUM ( FactDowntimeDaily[downtime_hours] )            // per-day split: date slicing matches the app's clipping
+
+Unplanned Downtime Hours =
+    CALCULATE ( [Total Downtime Hours], FactDowntimeDaily[downtime_type] = "UNPLANNED_FAILURE" )
+
+Failure Count =
+    CALCULATE (
+        COUNTROWS ( FactDowntimeEvents ),
+        FactDowntimeEvents[downtime_type] = "UNPLANNED_FAILURE",
+        USERELATIONSHIP ( FactDowntimeEvents[start_date_key], DimDate[date_key] )   // failures that STARTED in the period
+    )
+
+MTTR Hours =
+    VAR closed =
+        CALCULATETABLE (
+            FactDowntimeEvents,
+            FactDowntimeEvents[downtime_type] = "UNPLANNED_FAILURE",
+            FactDowntimeEvents[is_ongoing] = FALSE ()
+        )                                                 // active relationship: end_date_key (events that ENDED in the period)
+    RETURN
+        IF ( COUNTROWS ( closed ) > 0, AVERAGEX ( closed, FactDowntimeEvents[duration_hours] ) )   // BLANK, never 0, without data
+
+// ---------------------------------------------------------------- Work orders
+Work Orders Reported =
+    COUNTROWS ( FactWorkOrders )                          // active relationship: reported_date_key
+
+Open Work Orders =
+    CALCULATE ( COUNTROWS ( FactWorkOrders ), FactWorkOrders[is_open] = TRUE (), REMOVEFILTERS ( DimDate ) )   // snapshot
+
+Overdue Work Orders =
+    CALCULATE ( COUNTROWS ( FactWorkOrders ), FactWorkOrders[is_overdue] = TRUE (), REMOVEFILTERS ( DimDate ) ) // snapshot
+
+Work Order Completion Rate % =
+    DIVIDE (
+        CALCULATE ( COUNTROWS ( FactWorkOrders ), FactWorkOrders[status] = "COMPLETED" ),
+        CALCULATE ( COUNTROWS ( FactWorkOrders ), FactWorkOrders[status] <> "CANCELLED" )
+    )
+
+PM Tasks Due =
+    CALCULATE (
+        COUNTROWS ( FactWorkOrders ),
+        FactWorkOrders[pm_counted] = TRUE (),
+        USERELATIONSHIP ( FactWorkOrders[due_date_key], DimDate[date_key] )
+    )
+
+PM Tasks On Time =
+    CALCULATE (
+        COUNTROWS ( FactWorkOrders ),
+        FactWorkOrders[pm_on_time] = TRUE (),
+        USERELATIONSHIP ( FactWorkOrders[due_date_key], DimDate[date_key] )
+    )
+
+Preventive Maintenance Compliance % =
+    DIVIDE ( [PM Tasks On Time], [PM Tasks Due] )         // BLANK when no task was due
+
+// ---------------------------------------------------------------- Costs (single cost ledger - never add FactWorkOrders[wo_total_cost])
+Total Maintenance Cost =
+    CALCULATE (
+        SUM ( FactOperationalCosts[amount] ),
+        FactOperationalCosts[cost_type] = "ACTUAL",
+        FactOperationalCosts[is_maintenance] = TRUE ()
+    )
+
+Total Operating Cost =
+    CALCULATE ( SUM ( FactOperationalCosts[amount] ), FactOperationalCosts[cost_type] = "ACTUAL" )
+
+Budget Amount =
+    SUM ( FactBudgetDaily[budget_amount] )                // daily-prorated, so partial months compare correctly
+
+Actual vs Budget Variance =
+    [Total Operating Cost] - [Budget Amount]              // positive = overspend
+
+Actual vs Budget Variance % =
+    DIVIDE ( [Actual vs Budget Variance], [Budget Amount] )
+
+Month-over-Month Maintenance Cost Change % =
+    VAR cur = [Total Maintenance Cost]
+    VAR prev = CALCULATE ( [Total Maintenance Cost], DATEADD ( DimDate[date], -1, MONTH ) )
+    RETURN DIVIDE ( cur - prev, prev )                    // use on a visual with DimDate[year_month] on the axis
+
+// ---------------------------------------------------------------- Inventory (snapshot attributes on DimInventoryItem)
+Low Stock Item Count =
+    CALCULATE (
+        COUNTROWS ( DimInventoryItem ),
+        DimInventoryItem[is_active] = TRUE (),
+        DimInventoryItem[stock_status] IN { "LOW", "CRITICAL_LOW", "OUT_OF_STOCK" }
+    )
+
+Critical Stock Item Count =
+    CALCULATE ( [Low Stock Item Count], DimInventoryItem[criticality] = "CRITICAL" )
+
+Stock Valuation =
+    CALCULATE ( SUM ( DimInventoryItem[stock_value] ), DimInventoryItem[is_active] = TRUE () )
+
+Net Consumption Value =
+    SUM ( FactInventoryTransactions[consumption_value] )  // issues minus returns at recorded cost
+
+Goods Received Value =
+    SUM ( FactPurchaseReceipts[received_value] )
+
+// ---------------------------------------------------------------- Production / energy (primary output metric)
+Energy Output =
+    CALCULATE ( SUM ( FactOperationalMeasurements[value] ), DimMetric[is_primary_output] = TRUE () )
+
+Energy Output Target =
+    CALCULATE ( SUM ( FactOperationalMeasurements[target_value] ), DimMetric[is_primary_output] = TRUE () )
+
+Output vs Target % =
+    DIVIDE ( [Energy Output], [Energy Output Target] )
+
+Missing Readings =
+    CALCULATE ( COUNTROWS ( FactOperationalMeasurements ), FactOperationalMeasurements[is_missing] = TRUE () )
+
+Maintenance Cost per MWh =
+    DIVIDE ( [Total Maintenance Cost], [Energy Output] )

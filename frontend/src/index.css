@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Semantic design tokens (RGB triplets so Tailwind can apply alpha).
+ * Light is the default; [data-theme="dark"] is set on <html> by the theme provider
+ * (and by an inline script in index.html before first paint).
+ */
+:root {
+  color-scheme: light;
+  --page: 244 245 242;
+  --surface: 255 255 255;
+  --raised: 250 250 248;
+  --sunken: 238 239 235;
+  --border: 225 224 217;
+  --border-strong: 195 194 183;
+  --ink: 17 18 17;
+  --ink-2: 72 72 68;
+  --muted: 112 111 105;
+  --accent: 15 111 116;
+  --accent-ink: 255 255 255;
+  --accent-soft: 224 240 240;
+  --info: 37 99 168;
+  --info-soft: 226 236 250;
+  --good: 0 99 0;
+  --good-soft: 225 243 225;
+  --warn: 138 90 0;
+  --warn-soft: 253 242 210;
+  --serious: 168 70 30;
+  --bad: 176 40 40;
+  --bad-soft: 252 230 230;
+  --focus: 15 111 116;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --page: 14 15 15;
+  --surface: 26 26 25;
+  --raised: 34 35 33;
+  --sunken: 20 21 20;
+  --border: 48 49 46;
+  --border-strong: 72 73 69;
+  --ink: 240 239 236;
+  --ink-2: 195 194 183;
+  --muted: 154 152 143;
+  --accent: 63 184 176;
+  --accent-ink: 10 20 20;
+  --accent-soft: 22 52 52;
+  --info: 110 170 240;
+  --info-soft: 24 38 60;
+  --good: 12 163 12;
+  --good-soft: 18 44 18;
+  --warn: 250 178 25;
+  --warn-soft: 52 40 12;
+  --serious: 236 131 90;
+  --bad: 230 103 103;
+  --bad-soft: 60 24 24;
+  --focus: 63 184 176;
+}
+
+html, body, #root { height: 100%; }
+body {
+  @apply bg-page text-ink antialiased text-sm;
+}
+*:focus-visible {
+  outline: 2px solid rgb(var(--focus));
+  outline-offset: 2px;
+}
+.tabular { font-variant-numeric: tabular-nums; }
+
+@layer components {
+  .card { @apply bg-surface border border-border rounded-lg shadow-card; }
+  .input {
+    @apply w-full rounded-md border border-border-strong bg-surface px-2.5 py-1.5 text-sm text-ink
+           placeholder:text-muted disabled:cursor-not-allowed disabled:opacity-60;
+  }
+  .input[aria-invalid="true"] { @apply border-bad; }
+  .label { @apply block text-xs font-medium text-ink-2 mb-1; }
+  .th { @apply px-3 py-2 text-left text-xs font-semibold text-ink-2 whitespace-nowrap; }
+  .td { @apply px-3 py-2 align-top; }
+  .link { @apply text-accent hover:underline underline-offset-2; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
